@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>麦麦派对管家 mcd-party-butler · 从发现到订上的派对预订闭环</title>
+<meta name="description" content="基于麦当劳官方 MCP 的派对预订闭环：279 城场次查询、价格分→元双源核验、剩余名额透明、确认式下单。发现活动用 mcd-event-radar，订上场次用麦麦派对管家。">
+<style>
+  :root{
+    --red:#DA291C; --red-dark:#A81E14; --yellow:#FFC72C; --yellow-soft:#FFF4D6;
+    --ink:#26215C; --ink-soft:#5C5878; --bg:#FBF9F4; --card:#FFFFFF; --line:#E9E4D8;
+    --teal:#0F6E56; --teal-soft:#E1F5EE; --mono:'Cascadia Mono','Consolas','Courier New',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px}
+  header{background:var(--red);color:#fff;padding:56px 0 48px}
+  header .wrap{display:flex;flex-direction:column;gap:14px}
+  .logo{display:flex;align-items:center;gap:14px}
+  .logo .mark{width:52px;height:52px;border-radius:14px;background:var(--yellow);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800}
+  h1{font-size:30px;font-weight:800;letter-spacing:.5px}
+  .tag{font-size:15px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 14px;width:fit-content}
+  .sub{font-size:16px;max-width:640px}
+  .sub b{color:var(--yellow)}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px}
+  .badges span{background:rgba(0,0,0,.18);border-radius:6px;padding:3px 10px;font-family:var(--mono)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:-26px 0 40px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 16px;text-align:center;box-shadow:0 1px 3px rgba(38,33,92,.05)}
+  .stat b{display:block;font-size:26px;color:var(--red);font-weight:800}
+  .stat i{font-style:normal;font-size:12.5px;color:var(--ink-soft)}
+  section{margin:44px 0}
+  h2{font-size:20px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+  h2::before{content:'';width:6px;height:22px;border-radius:3px;background:var(--yellow)}
+  .desc{color:var(--ink-soft);font-size:14px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(38,33,92,.05)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{font-size:12.5px;color:var(--ink-soft);text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);font-weight:600}
+  td{padding:10px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:none}
+  .price{font-weight:800;color:var(--red);font-family:var(--mono)}
+  .ok{color:var(--teal);font-weight:600;font-size:12.5px;background:var(--teal-soft);border-radius:6px;padding:2px 8px;white-space:nowrap}
+  .cmd{background:#14141C;color:#D6D6DE;border-radius:12px;padding:16px 18px;font-family:var(--mono);font-size:13px;overflow-x:auto;white-space:nowrap;margin-top:14px}
+  .cmd .p{color:#7EE787}
+  .cmd .y{color:#F0B429}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .flow{display:flex;gap:8px;flex-wrap:wrap;counter-reset:step}
+  .step{flex:1;min-width:120px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;counter-increment:step;position:relative}
+  .step b{display:block;font-size:13.5px;color:var(--red)}
+  .step i{font-style:normal;font-size:11.5px;color:var(--ink-soft);font-family:var(--mono);word-break:break-all}
+  .step::before{content:counter(step,decimal-leading-zero);font-family:var(--mono);font-size:11px;color:var(--yellow);font-weight:700;display:block;margin-bottom:4px}
+  .note{background:var(--yellow-soft);border:1px solid #F2DE9A;border-radius:12px;padding:14px 16px;font-size:13.5px}
+  .note b{color:var(--red-dark)}
+  .preview{background:#14141C;border-radius:12px;padding:16px 18px;font-family:var(--mono);font-size:13px;color:#D6D6DE;overflow-x:auto}
+  .preview .h{color:#F0B429}
+  .preview .g{color:#7EE787}
+  .preview .d{color:#8B8B9E}
+  footer{border-top:1px solid var(--line);margin-top:52px;padding:26px 0 40px;color:var(--ink-soft);font-size:13px}
+  footer a{color:var(--red)}
+  @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="logo"><div class="mark">M</div><h1>麦麦派对管家<span style="font-size:16px;font-weight:500;opacity:.85"> mcd-party-butler</span></h1></div>
+    <div class="tag">发现活动用 mcd-event-radar · 订上场次用麦麦派对管家</div>
+    <p class="sub">基于<b>麦当劳官方 MCP</b> 的派对预订闭环：类目 → 城市 → 门店 → 日期 → 场次 → 确认式下单。价格双源核验、剩余名额透明、一句话智能规划。</p>
+    <div class="badges"><span>零依赖</span><span>Node ≥ 18</span><span>官方 MCP</span><span>65 tests</span><span>CI ✓</span><span>MIT</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><b>279</b><i>覆盖城市</i></div>
+    <div class="stat"><b>¥45</b><i>实测最低单价</i></div>
+    <div class="stat"><b>×100</b><i>价格倍率核验</i></div>
+    <div class="stat"><b>0</b><i>无确认下单次数</i></div>
+  </div>
+
+  <section>
+    <h2>一句话智能规划</h2>
+    <p class="desc">不逐步查——一条命令串完全链路，直接给排序好的推荐表（以下为 2026-10-10 真实运行结果：上海 · 6 人 · 人均预算 ¥150）。</p>
+    <div class="card">
+      <table>
+        <tr><th>商品</th><th>门店</th><th>日期</th><th>时段</th><th>人数</th><th>剩余</th><th>单价</th><th>距离</th></tr>
+        <tr><td>麦当劳亲子读书会</td><td>上海黄浦华旭国际大厦餐厅</td><td>10-17</td><td>10:30-12:00</td><td>5-12人</td><td>12</td><td class="price">¥45</td><td>816m</td></tr>
+        <tr><td>麦当劳亲子读书会</td><td>上海黄浦华旭国际大厦餐厅</td><td>10-17</td><td>14:00-15:30</td><td>5-12人</td><td>12</td><td class="price">¥45</td><td>816m</td></tr>
+        <tr><td>麦当劳一起开心鸭尊享版生日派对</td><td>上海黄浦华旭国际大厦餐厅</td><td>10-17</td><td>12:00-13:30</td><td>5-12人</td><td>12</td><td class="price">¥138</td><td>415m</td></tr>
+      </table>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px">读书会 ¥45/位被直接挖出——比生日会便宜 3 倍，且带 <span class="ok">✓ 已核验</span> 价格。</p>
+      <div class="cmd"><span class="p">$</span> node party.mjs plan --city 310100 --guests 6 --budget <span class="y">150</span> --date 2026-10-17</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div>
+        <h2>价格双源核验</h2>
+        <p class="desc">场次接口返回裸数字 <span style="font-family:var(--mono)">price: 11800</span>，不标单位。</p>
+        <div class="card">
+          <p style="font-family:var(--mono);font-size:13px">场次接口：<b>11800</b>（单位不明）<br>商品详情：<b>"118"</b>（元）<br>倍率恒为 ×100（11/11 实测）</p>
+          <p style="margin-top:10px"><span class="ok">✓ 一致 → 显示 ¥118</span>　<span style="font-size:12.5px;color:var(--ink-soft)">不一致 → 回退「单位待核实」</span></p>
+        </div>
+      </div>
+      <div>
+        <h2>安全门设计</h2>
+        <p class="desc">下单类工具是真实写操作，安全门是硬约束。</p>
+        <div class="card">
+          <p style="font-size:14px"><b style="color:var(--red)">无确认，绝不下单。</b></p>
+          <ul style="font-size:13.5px;margin:8px 0 0 18px;color:var(--ink-soft)">
+            <li><span style="font-family:var(--mono)">book</span> 默认 dry-run，只打印预览</li>
+            <li>必须显式 <span style="font-family:var(--mono)">--confirm</span> 才调用下单</li>
+            <li>Token 不落仓库、日志全脱敏</li>
+            <li>下单成功自动生成 .ics 日历邀请</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>六步调用链</h2>
+    <p class="desc">从类目到下单的完整编排，全网参赛作品几乎无人走通这条链。</p>
+    <div class="flow">
+      <div class="step"><b>选类目</b><i>mall-points-products</i></div>
+      <div class="step"><b>选城市</b><i>query-party-city</i></div>
+      <div class="step"><b>选门店</b><i>query-party-store</i></div>
+      <div class="step"><b>选日期</b><i>query-party-store-date</i></div>
+      <div class="step"><b>挑场次</b><i>query-party-store-session</i></div>
+      <div class="step"><b>核价</b><i>mall-product-detail</i></div>
+      <div class="step"><b>预订</b><i>party-order-create</i></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>订单预览（dry-run 真实输出）</h2>
+    <div class="preview">
+<span class="h">==================== 订单预览（dry-run，未下单） ====================</span><br>
+商品：麦当劳过家家派对尊享版（skuId=11936）<br>
+门店：麦当劳上海黄浦华旭国际大厦餐厅（南京东路街道西藏中路336号）<br>
+日期：2026-10-17　时段：15:30 - 17:00　形式：拼团<br>
+人数：5 人（场次范围 5-12 人，适用 4-12 岁）<br>
+单价：<span class="h">¥118.00</span>（已与商品详情核验一致）　小计：<span class="h">¥590.00</span><br>
+场次：id=36925878，剩余名额 12<br>
+<span class="d">--------------------------------------------------------------------</span><br>
+<span class="g">本次未调用 party-order-create，未产生任何订单。</span><br>
+<span class="d">如确认无误，请追加 --confirm 后重新执行本命令以提交订单。</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>30 秒上手</h2>
+    <div class="note"><b>前置：</b>在 <a href="https://open.mcd.cn/mcp" style="color:var(--red)">open.mcd.cn/mcp</a> 用手机号申请 MCP Token（免费，2 分钟）。</div>
+    <div class="cmd" style="margin-top:14px"><span class="p">$</span> git clone https://github.com/xu9687/mcd-party-butler<br><span class="p">$</span> cd mcd-party-butler && node setup-connector.mjs　<span class="d"># WorkBuddy 一键配置</span><br><span class="p">$</span> node party.mjs plan --city 310100 --guests 6 --budget 150　<span class="d"># 直接出推荐</span></div>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:12px">WorkBuddy 用户配置后直接对话「帮我看看上海周末有什么麦当劳派对」；CLI 用户零依赖，只要 Node ≥ 18。</p>
+  </section>
+
+  <footer>
+    <p><a href="https://github.com/xu9687/mcd-party-butler">GitHub · xu9687/mcd-party-butler</a> ｜ 麦当劳程序员创意开发大赛（M-CODE）参赛作品 ｜ 本页数据为 2026-10-10 真实运行结果，价格与名额以官方 MCP 实时结果为准 ｜ 非官方工具，与麦当劳公司无隶属关系</p>
+  </footer>
+</div>
+
+</body>
+</html>
