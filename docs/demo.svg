@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="668" viewBox="0 0 980 668" role="img">
+<title>麦麦派对管家 · 真实终端输出</title>
+<desc>查场次与订单预览两条命令的真实运行结果</desc>
+<rect x="0" y="0" width="980" height="668" rx="14" fill="#14141c"/>
+<circle cx="28" cy="26" r="6" fill="#ff5f56"/><circle cx="48" cy="26" r="6" fill="#ffbd2e"/><circle cx="68" cy="26" r="6" fill="#27c93f"/>
+<text x="490" y="31" text-anchor="middle" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="12" fill="#8b8b9e">麦麦派对管家 · 真实终端输出 · 2026-10-10</text>
+<text xml:space="preserve" x="24" y="66" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#7ee787">$ node party.mjs sessions --spu 11308 --store 1450713 --date 2026-10-17 --available</text>
+<text xml:space="preserve" x="24" y="88" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">麦麦派对管家 v1.0.0 · 数据来自麦当劳官方 MCP · 仅供参考</text>
+<text xml:space="preserve" x="24" y="109" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">门店 1450713 · 2026-10-17 · 麦当劳过家家派对尊享版 的场次：共 2 场，显示 2 场（仅剩余名额&gt;0）</text>
+<text xml:space="preserve" x="24" y="132" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#9a9ab0">┌──────────┬─────────────┬──────────┬──────────┬──────┬───────────┐</text>
+<text xml:space="preserve" x="24" y="153" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">│ 场次id   │ 时段        │ 人数范围 │ 剩余名额 │ 价格 │ 核验      │</text>
+<text xml:space="preserve" x="24" y="174" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#9a9ab0">├──────────┼─────────────┼──────────┼──────────┼──────┼───────────┤</text>
+<text xml:space="preserve" x="24" y="195" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">│ 36925878 │ 15:30-17:00 │ 5-12人   │ 12       │ <tspan fill="#f0b429">¥118</tspan> │ <tspan fill="#7ee787">✓ 已核验</tspan> │</text>
+<text xml:space="preserve" x="24" y="216" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">│ 36930787 │ 17:00-18:30 │ 5-12人   │ 12       │ <tspan fill="#f0b429">¥118</tspan> │ <tspan fill="#7ee787">✓ 已核验</tspan> │</text>
+<text xml:space="preserve" x="24" y="237" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#9a9ab0">└──────────┴─────────────┴──────────┴──────────┴──────┴───────────┘</text>
+<text xml:space="preserve" x="24" y="263" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">示例摘要：场次 36925878 · 15:30-17:00 · 5-12人 · 剩余 12 名额 · 价格 ¥118</text>
+<text xml:space="preserve" x="24" y="298" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#7ee787">$ node party.mjs book --spu 11308 --sku 11936 --store 1450713 --date 2026-10-17 --session 36925878 --party-type 2 --count 5</text>
+<text xml:space="preserve" x="24" y="320" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">麦麦派对管家 v1.0.0 · 数据来自麦当劳官方 MCP · 仅供参考</text>
+<text xml:space="preserve" x="24" y="341" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#f0b429">==================== 订单预览（dry-run，未下单） ====================</text>
+<text xml:space="preserve" x="24" y="362" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">商品：麦当劳过家家派对尊享版（skuId=11936）</text>
+<text xml:space="preserve" x="24" y="383" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">门店：麦当劳上海黄浦华旭国际大厦餐厅（南京东路街道西藏中路336号）</text>
+<text xml:space="preserve" x="24" y="404" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">日期：2026-10-17　时段：15:30 - 17:00　形式：拼团</text>
+<text xml:space="preserve" x="24" y="425" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">人数：5 人（场次范围 5-12 人，适用 4-12 岁）</text>
+<text xml:space="preserve" x="24" y="446" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">单价：<tspan fill="#f0b429">¥118.00</tspan>（已与商品详情核验一致）　小计：<tspan fill="#f0b429">¥590.00</tspan></text>
+<text xml:space="preserve" x="24" y="467" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#d6d6de">场次：id=36925878，剩余名额 12</text>
+<text xml:space="preserve" x="24" y="492" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">--------------------------------------------------------------------</text>
+<text xml:space="preserve" x="24" y="513" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">提醒：派对需提前 3 天预订，适用 4-12 岁儿童；价格与名额以官方 MCP 实时结果为准。</text>
+<text xml:space="preserve" x="24" y="534" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#7ee787">本次未调用 party-order-create，未产生任何订单。</text>
+<text xml:space="preserve" x="24" y="555" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="13" fill="#8b8b9e">如确认无误，请追加 --confirm 后重新执行本命令以提交订单。</text>
+<rect x="24" y="586" width="932" height="52" rx="10" fill="#1d1d28"/>
+<text xml:space="preserve" x="44" y="608" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="12.5" fill="#a5b4fc">六步链路：类目 → 城市(279) → 门店(174/上海) → 日期(9天) → 场次(价格分→元核验 ✓) → 预订(无确认不下单)</text>
+<text xml:space="preserve" x="44" y="628" font-family="'Cascadia Mono','Consolas','Courier New',monospace" font-size="12.5" fill="#8b8b9e">发现活动用 mcd-event-radar · 订上场次用麦麦派对管家</text>
+</svg>
