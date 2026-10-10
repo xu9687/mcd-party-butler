@@ -9,6 +9,7 @@
 `零依赖 · 只用 Node 内置模块` `Node ≥ 18` `麦当劳官方 MCP` `M-CODE 参赛作品` `MIT License`
 
 [![CI](https://github.com/xu9687/mcd-party-butler/actions/workflows/ci.yml/badge.svg)](https://github.com/xu9687/mcd-party-butler/actions/workflows/ci.yml)
+**[在线展示页 →](https://xu9687.github.io/mcd-party-butler/)**
 
 ![真实终端输出：查场次 + 订单预览（dry-run）](docs/demo.svg)
 
