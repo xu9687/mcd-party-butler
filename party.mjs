@@ -16,8 +16,9 @@ import { sortByDistance, formatDistanceM } from './lib/geo.mjs';
 import { verifyPrice, summarizeSession } from './lib/price.mjs';
 import { table, clip } from './lib/format.mjs';
 import { buildIcs } from './lib/ics.mjs';
+import { filterSessions, sortResults, pickDate, buildBookHint } from './lib/plan.mjs';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const BANNER = `麦麦派对管家 v${VERSION} · 数据来自麦当劳官方 MCP · 仅供参考`;
 
 const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
@@ -37,6 +38,15 @@ const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
 
   sessions --spu <id> --store <门店code> --date <YYYY-MM-DD> [--available]
       查询场次（含与商品详情交叉核验后的价格、剩余名额）；--available 只显示有余量场次
+
+  plan --city <城市code> [--spu <id|all>] [--guests <n>] [--budget <元>]
+       [--date <YYYY-MM-DD>] [--near "纬度,经度"] [--limit <n>] [--json]
+      一句话智能规划：自动串「类目→门店→日期→场次」全链路，按价格与距离
+      排序输出可订场次推荐表，并给出可直接粘贴的 book 预览命令。
+      - --spu all（默认）：每个在售类目取第 1 个商品；--spu <id> 指定单个商品
+      - --guests：按人数过滤（场次人数区间 + 剩余名额）
+      - --budget：人均预算上限（元）
+      - --json：输出机器可读 JSON（供 Agent / 程序化调用）
 
   book --spu <id> --sku <id> --store <门店code> --date <YYYY-MM-DD>
        --session <场次id> --party-type 1|2 --count <n> [--confirm] [--city <城市code>]
@@ -370,10 +380,190 @@ async function cmdBook(flags) {
   console.log(`已生成日历邀请：${icsPath}`);
 }
 
+/** plan 子命令：一句话智能规划（全链路只读编排，输出推荐场次表） */
+async function cmdPlan(flags) {
+  requireFlags(flags, ['city']);
+  const cityCode = String(flags.city);
+  const guests = flags.guests !== undefined && flags.guests !== true ? Number(flags.guests) : null;
+  const budgetYuan = flags.budget !== undefined && flags.budget !== true ? Number(flags.budget) : null;
+  if (guests != null && (!Number.isFinite(guests) || guests <= 0)) {
+    throw new Error('--guests 必须是正整数');
+  }
+  if (budgetYuan != null && (!Number.isFinite(budgetYuan) || budgetYuan <= 0)) {
+    throw new Error('--budget 必须是正数（单位：元）');
+  }
+  const budgetFen = budgetYuan != null ? Math.round(budgetYuan * 100) : null;
+  const storeLimit = Number(flags.limit ?? 3) || 3;
+  const dateStr = typeof flags.date === 'string' && flags.date !== '' ? flags.date : null;
+  const near = parseNear(flags.near);
+  const wantJson = flags.json === true;
+
+  const log = wantJson ? () => {} : (s) => process.stderr.write(s + '\n');
+  log(`规划条件：城市 ${cityCode}${guests ? ` · ${guests} 人` : ''}${budgetYuan ? ` · 人均预算 ¥${budgetYuan}` : ''}${dateStr ? ` · ${dateStr}` : ''}`);
+
+  // 1) 确定候选商品：--spu <id> 单个，否则每类目第 1 个商品
+  const spuIds = [];
+  const spuNames = {};
+  const skuCache = new Map();
+  const loadDetail = async (spuId) => {
+    if (skuCache.has(spuId)) return skuCache.get(spuId);
+    let sku = null;
+    let name = '';
+    try {
+      const detail = await callTool('mall-product-detail', { spuId });
+      name = detail?.spuName ?? '';
+      sku = (detail?.skuList ?? [])[0] ?? null;
+    } catch {
+      // 降级：价格按待核实处理
+    }
+    const v = { sku, name };
+    skuCache.set(spuId, v);
+    return v;
+  };
+
+  if (flags.spu !== undefined && flags.spu !== true && flags.spu !== 'all') {
+    spuIds.push(Number(flags.spu));
+  } else {
+    for (const cat of PARTY_CATEGORIES) {
+      const products = asArray(await callTool('mall-points-products', { catRuleIds: cat.catRuleIds }));
+      if (products.length === 0) continue;
+      const p = products[0];
+      spuIds.push(Number(p.spuId));
+      spuNames[p.spuId] = `${cat.name} · ${p.spuName}`;
+      log(`候选：${cat.name} → ${p.spuName}（spuId ${p.spuId}）`);
+    }
+  }
+
+  // 2) 逐商品扫门店 → 日期 → 场次
+  const results = [];
+  const warnedDates = [];
+  for (const spuId of spuIds) {
+    let stores = [];
+    try {
+      stores = asArray(await callTool('query-party-store', { code: cityCode, spuId }));
+    } catch {
+      continue;
+    }
+    if (stores.length === 0) {
+      log(`spuId ${spuId} 在城市 ${cityCode} 暂无可办门店，跳过`);
+      continue;
+    }
+    if (near) stores = sortByDistance(stores, near.lat, near.lng);
+    const scanned = stores.slice(0, storeLimit);
+
+    for (const st of scanned) {
+      let dates = [];
+      try {
+        dates = asArray(await callTool('query-party-store-date', { spuId, storeCode: String(st.code) }));
+      } catch {
+        continue;
+      }
+      const picked = pickDate(dates, dateStr);
+      if (!picked.date) continue;
+      if (picked.warned) warnedDates.push(`${picked.date}（门店 ${st.code}）`);
+
+      let sessions = [];
+      try {
+        sessions = asArray(
+          await callTool('query-party-store-session', { spuId, storeCode: String(st.code), dateStr: picked.date })
+        );
+      } catch {
+        continue;
+      }
+      const matched = filterSessions(sessions, { guests, budgetFen });
+      if (matched.length === 0) continue;
+
+      const { sku, name } = await loadDetail(spuId);
+      for (const s of matched) {
+        const verified = verifyPrice(s.price, sku);
+        results.push({
+          spuId,
+          spuName: name || spuNames[spuId] || `spuId ${spuId}`,
+          skuId: sku?.skuId ?? null,
+          storeCode: String(st.code),
+          storeName: st.name ?? '',
+          address: st.address ?? '',
+          distanceM: near ? (st.calcDistance ?? st.distance ?? null) : (st.distance ?? null),
+          distanceText: near ? formatDistanceM(st.calcDistance) : (st.distanceText ?? '-'),
+          date: picked.date,
+          sessionId: s.id,
+          timeStart: s.timeStart,
+          timeEnd: s.timeEnd,
+          partyMin: s.partyMin,
+          partyMax: s.partyMax,
+          leftNum: Number(s.leftNum),
+          priceFen: s.price != null ? Number(s.price) : null,
+          priceText: verified.text,
+          priceVerified: verified.verified,
+          guests: guests ?? null,
+          cityCode,
+        });
+      }
+    }
+  }
+
+  const ranked = sortResults(results).slice(0, 10);
+
+  if (wantJson) {
+    console.log(
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          city: cityCode,
+          filters: { guests, budgetYuan, date: dateStr },
+          count: ranked.length,
+          results: ranked,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  if (ranked.length === 0) {
+    console.log(`\n城市 ${cityCode} 未找到满足条件的可订场次。`);
+    console.log('建议：放宽 --budget / 更换 --date / 去掉 --guests 限制后重试。');
+    return;
+  }
+
+  console.log(
+    `\n城市 ${cityCode} 推荐场次（共 ${ranked.length} 个，按价格升序 · 价格已与商品详情交叉核验）：`
+  );
+  console.log(
+    table(
+      ['商品', '门店', '日期', '时段', '人数', '剩余', '单价', '距离'],
+      ranked.map((r) => [
+        clip(r.spuName, 16),
+        clip(r.storeName, 14),
+        r.date,
+        `${r.timeStart}-${r.timeEnd}`,
+        `${r.partyMin}-${r.partyMax}人`,
+        r.leftNum,
+        r.priceText + (r.priceVerified ? '' : '?'),
+        r.distanceText,
+      ])
+    )
+  );
+  if (warnedDates.length > 0) {
+    console.log(`注意：指定日期不在部分门店可订列表中，返回可能为空：${[...new Set(warnedDates)].join('、')}`);
+  }
+  const best = ranked[0];
+  console.log('\n最划算方案（可直接粘贴执行，先预览再决定是否下单）：');
+  console.log('  ' + buildBookHint(best));
+  console.log('\n提示：以上命令默认为 dry-run 预览；确认无误后再追加 --confirm 提交订单。');
+}
+
 /** CLI 主入口 */
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
-  console.log(BANNER);
+  const flags = parseArgs(rest);
+  // --json 模式下 stdout 必须是纯 JSON：BANNER 改走 stderr
+  if (flags.json === true) {
+    process.stderr.write(BANNER + '\n');
+  } else {
+    console.log(BANNER);
+  }
 
   if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') {
     console.log(HELP_TEXT);
@@ -383,7 +573,6 @@ async function main() {
   // 除 help 外均需要 token（callTool 内部也会校验，这里提前给出明确指引）
   resolveToken();
 
-  const flags = parseArgs(rest);
   switch (cmd) {
     case 'categories':
       return cmdCategories();
@@ -395,6 +584,8 @@ async function main() {
       return cmdDates(flags);
     case 'sessions':
       return cmdSessions(flags);
+    case 'plan':
+      return cmdPlan(flags);
     case 'book':
       return cmdBook(flags);
     default:
