@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterSessions, sortResults, pickDate, buildBookHint } from '../lib/plan.mjs';
+import { filterSessions, sortResults, pickDate, buildBookHint, mapLimit, diffSnapshots } from '../lib/plan.mjs';
 
 const S = (over = {}) => ({
   id: 1,
@@ -115,4 +115,74 @@ test('buildBookHint: 命令完整且不含 --confirm', () => {
   assert.ok(cmd.includes('--session 36925878'));
   assert.ok(cmd.includes('--count 6'));
   assert.ok(!cmd.includes('--confirm'));
+});
+
+test('mapLimit: 保持输入顺序', async () => {
+  const out = await mapLimit([30, 10, 20], 3, async (v) => {
+    await new Promise((r) => setTimeout(r, v));
+    return v * 2;
+  });
+  assert.deepEqual(out, [60, 20, 40]);
+});
+
+test('mapLimit: 并发数不超上限', async () => {
+  let running = 0;
+  let peak = 0;
+  await mapLimit([1, 2, 3, 4, 5, 6, 7, 8], 2, async () => {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, 30));
+    running--;
+    return null;
+  });
+  assert.ok(peak <= 2, `peak=${peak} 应 <= 2`);
+});
+
+test('mapLimit: 空数组与 null 输入', async () => {
+  assert.deepEqual(await mapLimit([], 3, async (x) => x), []);
+  assert.deepEqual(await mapLimit(null, 3, async (x) => x), []);
+});
+
+test('mapLimit: fn 抛错时整体 reject', async () => {
+  await assert.rejects(
+    mapLimit([1, 2], 2, async (v) => {
+      if (v === 2) throw new Error('boom');
+      return v;
+    }),
+    /boom/
+  );
+});
+
+const RS = (spuId, storeCode, sessionId, leftNum) => ({ spuId, storeCode, sessionId, leftNum, spuName: 'x', storeName: 'y', date: '2026-10-17', timeStart: '10:00', priceText: '¥88' });
+
+test('diffSnapshots: 首次（prev=null）全部视为新增', () => {
+  const next = [RS(1, 'a', 100, 5), RS(1, 'a', 101, 3)];
+  const d = diffSnapshots(null, next);
+  assert.equal(d.newSessions.length, 2);
+  assert.equal(d.soldOut.length, 0);
+});
+
+test('diffSnapshots: 检出新场次 / 名额减少 / 售罄下架', () => {
+  const prev = [RS(1, 'a', 100, 8), RS(1, 'a', 101, 0), RS(1, 'b', 200, 6)];
+  const next = [RS(1, 'a', 100, 5), RS(1, 'a', 101, 0), RS(1, 'a', 102, 4)];
+  const d = diffSnapshots(prev, next);
+  assert.equal(d.newSessions.length, 1);
+  assert.equal(d.newSessions[0].sessionId, 102);
+  assert.equal(d.decreased.length, 1);
+  assert.equal(d.decreased[0].delta, 3);
+  assert.equal(d.soldOut.length, 1); // 门店 b 的 200（上次有量）本次消失
+  assert.equal(d.dropped.length, 1);
+});
+
+test('diffSnapshots: 无变化时全空', () => {
+  const snap = [RS(1, 'a', 100, 5)];
+  const d = diffSnapshots(snap, [RS(1, 'a', 100, 5)]);
+  assert.equal(d.newSessions.length, 0);
+  assert.equal(d.decreased.length, 0);
+  assert.equal(d.soldOut.length, 0);
+});
+
+test('diffSnapshots: 名额增加不算 decreased', () => {
+  const d = diffSnapshots([RS(1, 'a', 100, 3)], [RS(1, 'a', 100, 7)]);
+  assert.equal(d.decreased.length, 0);
 });
