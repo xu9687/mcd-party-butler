@@ -68,6 +68,33 @@ $ node party.mjs watch --city 310100,110100,440100,440300
 快照历史与对比信号提交到 `docs/watch-latest.json`，展示页自动渲染成稀缺性看板。
 需要先在仓库 Settings → Secrets and variables → Actions 配置 `MCD_MCP_TOKEN`。
 
+### survival · 场次存活统计
+
+每次 watch 自动按日归档到 `docs/watch-history/`。`node party.mjs survival` 基于历史快照输出
+每个场次的初始/当前名额、存活天数与消失清单——**「不盯就没了」的实证**。数据从部署之日起积累，
+两周即可拟合出「周六晚黄金档平均存活 X 天」的实证曲线（竞品的概率是猜的，我们的是测的）。
+
+## 生日管家 · 一年一订变全自动
+
+派对工具的死穴是一年用一次。生日管家把它变成**设一次、每年被服务一次**：
+
+```bash
+$ node party.mjs birthday add --name 小宝 --date 05-20 --city 310100 --guests 8 --budget 150
+$ node party.mjs birthday check        # T-10 自动出比价推荐，T-3 强提醒（官方要求提前 3 天预订）
+```
+
+档案仅存本地 `birthdays.local.json`（已进 .gitignore，隐私绝不入公开仓库）。
+
+## 拼团进度卡 · 把名额变化变成社交信号
+
+```bash
+$ node party.mjs track --spu 1830 --store 1450713 --date 2026-10-14 --session 36843589 --name 小宝生日局
+$ node party.mjs track    # 名额 12 → 9（3 人已上车）+ 生成可复制到家长群的分享文案
+```
+
+每次 watch 更新后，`track` 自动对比出「已上车 X 人 · 还剩 Y 名额」，并生成一段
+可直接粘贴到微信群的进度卡——组织者转发，看到的人就是潜在的拼团者和 Star。
+
 ## 和「只发现不预订」有什么不一样
 
 | | 只发现（活动雷达类） | 麦麦派对管家 |

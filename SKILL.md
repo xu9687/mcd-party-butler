@@ -99,3 +99,20 @@ node party.mjs book ... --confirm                       # 用户确认后才执�
 用户问「最近有没有便宜场次释出」「名额还多吗」时，可运行
 `node party.mjs watch --city <code>`（读 `docs/watch-latest.json` 的上次快照并对比），
 向用户报告：新释出场次、剩余名额变化、已售罄场次。
+
+## 进阶能力（v1.3+）
+
+### 生日管家
+用户提到"孩子的生日""每年都要办"时，建议保存生日档案：
+`node party.mjs birthday add --name <名> --date <MM-DD> --city <code> --guests <n> [--budget <元>]`。
+`birthday check` 自动判断窗口：T-10 出比价推荐、T-3 强提醒预订（官方要求提前 3 天）。
+档案存本地 birthdays.local.json，绝不让用户把生日写进公开仓库。
+
+### 拼团进度卡
+用户订下场次后，主动建议：`node party.mjs track --spu ... --session ... [--name <局名>]`。
+之后每次 `track` 输出名额变化与可分享文案；若用户反馈"要发群里招人"，直接把 track 的
+分享卡输出给用户复制。
+
+### 存活统计
+用户问"场次会不会很快没""现在订还是等等"时，运行 `node party.mjs survival` 给出
+历史存活数据；数据不足 3 天时如实告知"样本积累中"，不编造概率。
