@@ -1,0 +1,35 @@
+name: watch
+
+on:
+  schedule:
+    # UTC 01:00 / 13:00 = 北京时间 09:00 / 21:00，每天两次稀缺性快照
+    - cron: "0 1 * * *"
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run watch (multi-city snapshot)
+        run: node party.mjs watch --city 310100,110100,440100,440300
+        env:
+          MCD_MCP_TOKEN: ${{ secrets.MCD_MCP_TOKEN }}
+      - name: Commit snapshot if changed
+        run: |
+          git config user.name "watch-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/watch-latest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(watch): 更新场次稀缺性快照 $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "快照无变化，跳过提交"
+          fi

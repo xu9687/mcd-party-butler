@@ -11,14 +11,16 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { callTool, resolveToken, MCP_ENDPOINT } from './lib/mcp-client.mjs';
 import { sortByDistance, formatDistanceM } from './lib/geo.mjs';
 import { verifyPrice, summarizeSession } from './lib/price.mjs';
 import { table, clip } from './lib/format.mjs';
 import { buildIcs } from './lib/ics.mjs';
-import { filterSessions, sortResults, pickDate, buildBookHint } from './lib/plan.mjs';
+import { filterSessions, sortResults, pickDate, buildBookHint, mapLimit, diffSnapshots } from './lib/plan.mjs';
+import { buildHtmlReport } from './lib/html-report.mjs';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const BANNER = `麦麦派对管家 v${VERSION} · 数据来自麦当劳官方 MCP · 仅供参考`;
 
 const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
@@ -40,13 +42,19 @@ const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
       查询场次（含与商品详情交叉核验后的价格、剩余名额）；--available 只显示有余量场次
 
   plan --city <城市code> [--spu <id|all>] [--guests <n>] [--budget <元>]
-       [--date <YYYY-MM-DD>] [--near "纬度,经度"] [--limit <n>] [--json]
+       [--date <YYYY-MM-DD>] [--near "纬度,经度"] [--limit <n>] [--format text|json|html]
       一句话智能规划：自动串「类目→门店→日期→场次」全链路，按价格与距离
       排序输出可订场次推荐表，并给出可直接粘贴的 book 预览命令。
       - --spu all（默认）：每个在售类目取第 1 个商品；--spu <id> 指定单个商品
       - --guests：按人数过滤（场次人数区间 + 剩余名额）
       - --budget：人均预算上限（元）
-      - --json：输出机器可读 JSON（供 Agent / 程序化调用）
+      - --format：text（默认）/ json（机器可读）/ html（交互决策页，写出 .html 文件）
+
+  watch --city <城市code[,code2...]> [--spu <id|all>] [--out <文件>]
+      场次稀缺性快照：全量扫描并写入快照文件，与上次快照对比输出信号
+      （新释出场次 / 售罄 / 名额减少）。配合 GitHub Actions 定时任务可持续追踪。
+      - 默认快照文件：docs/watch-latest.json
+      - watch 不做人数/预算过滤（记录全量库存）
 
   book --spu <id> --sku <id> --store <门店code> --date <YYYY-MM-DD>
        --session <场次id> --party-type 1|2 --count <n> [--confirm] [--city <城市code>]
@@ -380,31 +388,18 @@ async function cmdBook(flags) {
   console.log(`已生成日历邀请：${icsPath}`);
 }
 
-/** plan 子命令：一句话智能规划（全链路只读编排，输出推荐场次表） */
-async function cmdPlan(flags) {
-  requireFlags(flags, ['city']);
-  const cityCode = String(flags.city);
-  const guests = flags.guests !== undefined && flags.guests !== true ? Number(flags.guests) : null;
-  const budgetYuan = flags.budget !== undefined && flags.budget !== true ? Number(flags.budget) : null;
-  if (guests != null && (!Number.isFinite(guests) || guests <= 0)) {
-    throw new Error('--guests 必须是正整数');
-  }
-  if (budgetYuan != null && (!Number.isFinite(budgetYuan) || budgetYuan <= 0)) {
-    throw new Error('--budget 必须是正数（单位：元）');
-  }
-  const budgetFen = budgetYuan != null ? Math.round(budgetYuan * 100) : null;
-  const storeLimit = Number(flags.limit ?? 3) || 3;
-  const dateStr = typeof flags.date === 'string' && flags.date !== '' ? flags.date : null;
-  const near = parseNear(flags.near);
-  const wantJson = flags.json === true;
-
-  const log = wantJson ? () => {} : (s) => process.stderr.write(s + '\n');
-  log(`规划条件：城市 ${cityCode}${guests ? ` · ${guests} 人` : ''}${budgetYuan ? ` · 人均预算 ¥${budgetYuan}` : ''}${dateStr ? ` · ${dateStr}` : ''}`);
-
-  // 1) 确定候选商品：--spu <id> 单个，否则每类目第 1 个商品
-  const spuIds = [];
-  const spuNames = {};
+/**
+ * plan/watch 共用的全链路数据采集（只读）。
+ * 并发策略：商品层 2 路 × 门店层 4 路（对官方接口保持礼貌的上限）。
+ * @param {object} opts { cityCode, guests, budgetFen, dateStr, near, storeLimit, spuIds, log }
+ * @returns {Promise<{results: Array}>}
+ */
+async function collectPlanData(opts) {
+  const { cityCode, guests = null, budgetFen = null, dateStr = null, near = null } = opts;
+  const storeLimit = opts.storeLimit ?? 3;
+  const log = opts.log ?? (() => {});
   const skuCache = new Map();
+
   const loadDetail = async (spuId) => {
     if (skuCache.has(spuId)) return skuCache.get(spuId);
     let sku = null;
@@ -421,46 +416,43 @@ async function cmdPlan(flags) {
     return v;
   };
 
-  if (flags.spu !== undefined && flags.spu !== true && flags.spu !== 'all') {
-    spuIds.push(Number(flags.spu));
-  } else {
-    for (const cat of PARTY_CATEGORIES) {
+  // 1) 确定候选商品：外部指定或每个类目第 1 个商品
+  let spuIds = opts.spuIds;
+  if (!Array.isArray(spuIds)) {
+    const catProducts = await mapLimit(PARTY_CATEGORIES, 2, async (cat) => {
       const products = asArray(await callTool('mall-points-products', { catRuleIds: cat.catRuleIds }));
-      if (products.length === 0) continue;
-      const p = products[0];
-      spuIds.push(Number(p.spuId));
-      spuNames[p.spuId] = `${cat.name} · ${p.spuName}`;
-      log(`候选：${cat.name} → ${p.spuName}（spuId ${p.spuId}）`);
+      return products.length === 0 ? null : { cat: cat.name, p: products[0] };
+    });
+    spuIds = catProducts.filter(Boolean).map((x) => Number(x.p.spuId));
+    for (const x of catProducts) {
+      if (x) log(`候选：${x.cat} → ${x.p.spuName}（spuId ${x.p.spuId}）`);
     }
   }
 
-  // 2) 逐商品扫门店 → 日期 → 场次
-  const results = [];
-  const warnedDates = [];
-  for (const spuId of spuIds) {
+  // 2) 商品层并发 2 路：每商品查门店；门店层并发 4 路：查日期→场次
+  const perSpu = await mapLimit(spuIds, 2, async (spuId) => {
     let stores = [];
     try {
       stores = asArray(await callTool('query-party-store', { code: cityCode, spuId }));
     } catch {
-      continue;
+      return [];
     }
     if (stores.length === 0) {
       log(`spuId ${spuId} 在城市 ${cityCode} 暂无可办门店，跳过`);
-      continue;
+      return [];
     }
     if (near) stores = sortByDistance(stores, near.lat, near.lng);
     const scanned = stores.slice(0, storeLimit);
 
-    for (const st of scanned) {
+    const perStore = await mapLimit(scanned, 4, async (st) => {
       let dates = [];
       try {
         dates = asArray(await callTool('query-party-store-date', { spuId, storeCode: String(st.code) }));
       } catch {
-        continue;
+        return [];
       }
       const picked = pickDate(dates, dateStr);
-      if (!picked.date) continue;
-      if (picked.warned) warnedDates.push(`${picked.date}（门店 ${st.code}）`);
+      if (!picked.date) return [];
 
       let sessions = [];
       try {
@@ -468,21 +460,23 @@ async function cmdPlan(flags) {
           await callTool('query-party-store-session', { spuId, storeCode: String(st.code), dateStr: picked.date })
         );
       } catch {
-        continue;
+        return [];
       }
       const matched = filterSessions(sessions, { guests, budgetFen });
-      if (matched.length === 0) continue;
+      if (matched.length === 0) return [];
 
       const { sku, name } = await loadDetail(spuId);
-      for (const s of matched) {
+      return matched.map((s) => {
         const verified = verifyPrice(s.price, sku);
-        results.push({
+        return {
           spuId,
-          spuName: name || spuNames[spuId] || `spuId ${spuId}`,
+          spuName: name || `spuId ${spuId}`,
           skuId: sku?.skuId ?? null,
           storeCode: String(st.code),
           storeName: st.name ?? '',
           address: st.address ?? '',
+          latitude: st.latitude ?? null,
+          longitude: st.longitude ?? null,
           distanceM: near ? (st.calcDistance ?? st.distance ?? null) : (st.distance ?? null),
           distanceText: near ? formatDistanceM(st.calcDistance) : (st.distanceText ?? '-'),
           date: picked.date,
@@ -495,29 +489,70 @@ async function cmdPlan(flags) {
           priceFen: s.price != null ? Number(s.price) : null,
           priceText: verified.text,
           priceVerified: verified.verified,
-          guests: guests ?? null,
+          guests,
           cityCode,
-        });
-      }
-    }
-  }
+        };
+      });
+    });
+    return perStore.flat();
+  });
 
-  const ranked = sortResults(results).slice(0, 10);
+  return { results: perSpu.flat(), skuCache };
+}
+
+/** plan 子命令：一句话智能规划（text / json / html 三种输出） */
+async function cmdPlan(flags) {
+  requireFlags(flags, ['city']);
+  const cityCode = String(flags.city);
+  const guests = flags.guests !== undefined && flags.guests !== true ? Number(flags.guests) : null;
+  const budgetYuan = flags.budget !== undefined && flags.budget !== true ? Number(flags.budget) : null;
+  if (guests != null && (!Number.isFinite(guests) || guests <= 0)) {
+    throw new Error('--guests 必须是正整数');
+  }
+  if (budgetYuan != null && (!Number.isFinite(budgetYuan) || budgetYuan <= 0)) {
+    throw new Error('--budget 必须是正数（单位：元）');
+  }
+  const budgetFen = budgetYuan != null ? Math.round(budgetYuan * 100) : null;
+  const dateStr = typeof flags.date === 'string' && flags.date !== '' ? flags.date : null;
+  const near = parseNear(flags.near);
+  const format = String(flags.format ?? (flags.json === true ? 'json' : 'text'));
+  if (!['text', 'json', 'html'].includes(format)) {
+    throw new Error('--format 只支持 text / json / html');
+  }
+  const wantJson = format === 'json';
+  const log = wantJson ? () => {} : (s) => process.stderr.write(s + '\n');
+  log(
+    `规划条件：城市 ${cityCode}${guests ? ` · ${guests} 人` : ''}${budgetYuan ? ` · 人均预算 ¥${budgetYuan}` : ''}${dateStr ? ` · ${dateStr}` : ''}`
+  );
+
+  const spuIds =
+    flags.spu !== undefined && flags.spu !== true && flags.spu !== 'all' ? [Number(flags.spu)] : null;
+
+  const { results } = await collectPlanData({
+    cityCode,
+    guests,
+    budgetFen,
+    dateStr,
+    near,
+    storeLimit: Number(flags.limit ?? 3) || 3,
+    spuIds,
+    log,
+  });
+  const ranked = sortResults(results).slice(0, 50);
+  const generatedAt = new Date().toLocaleString('zh-CN', { hour12: false });
 
   if (wantJson) {
     console.log(
-      JSON.stringify(
-        {
-          generatedAt: new Date().toISOString(),
-          city: cityCode,
-          filters: { guests, budgetYuan, date: dateStr },
-          count: ranked.length,
-          results: ranked,
-        },
-        null,
-        2
-      )
+      JSON.stringify({ generatedAt, city: cityCode, filters: { guests, budgetYuan, date: dateStr }, count: ranked.length, results: ranked }, null, 2)
     );
+    return;
+  }
+
+  if (format === 'html') {
+    const html = buildHtmlReport(ranked, { city: `${CITY_NAME_HINT(cityCode)}`, cityCode, date: dateStr, guests, budgetYuan, generatedAt });
+    const file = `mcd-party-plan-${cityCode}-${dateStr ?? 'next'}.html`;
+    fs.writeFileSync(file, html, 'utf8');
+    console.log(`\n交互决策页已生成：${file}（双击用浏览器打开，可筛选/比价/复制下单命令）`);
     return;
   }
 
@@ -527,13 +562,11 @@ async function cmdPlan(flags) {
     return;
   }
 
-  console.log(
-    `\n城市 ${cityCode} 推荐场次（共 ${ranked.length} 个，按价格升序 · 价格已与商品详情交叉核验）：`
-  );
+  console.log(`\n城市 ${cityCode} 推荐场次（共 ${ranked.length} 个，按价格升序 · 价格已与商品详情交叉核验）：`);
   console.log(
     table(
       ['商品', '门店', '日期', '时段', '人数', '剩余', '单价', '距离'],
-      ranked.map((r) => [
+      ranked.slice(0, 10).map((r) => [
         clip(r.spuName, 16),
         clip(r.storeName, 14),
         r.date,
@@ -545,21 +578,82 @@ async function cmdPlan(flags) {
       ])
     )
   );
-  if (warnedDates.length > 0) {
-    console.log(`注意：指定日期不在部分门店可订列表中，返回可能为空：${[...new Set(warnedDates)].join('、')}`);
-  }
   const best = ranked[0];
   console.log('\n最划算方案（可直接粘贴执行，先预览再决定是否下单）：');
   console.log('  ' + buildBookHint(best));
   console.log('\n提示：以上命令默认为 dry-run 预览；确认无误后再追加 --confirm 提交订单。');
+  console.log('想看交互式决策页？加 --format html 试试。');
+}
+
+/** watch 子命令：场次稀缺性快照 + 与上次对比的信号输出 */
+async function cmdWatch(flags) {
+  requireFlags(flags, ['city']);
+  const cities = String(flags.city)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const outPath = typeof flags.out === 'string' && flags.out !== '' ? flags.out : 'docs/watch-latest.json';
+  const spuIds =
+    flags.spu !== undefined && flags.spu !== true && flags.spu !== 'all' ? [Number(flags.spu)] : null;
+
+  console.log(`快照城市：${cities.join('、')}（全量库存，不做人数/预算过滤）`);
+  const perCity = await mapLimit(cities, 2, (cityCode) =>
+    collectPlanData({ cityCode, guests: null, budgetFen: null, dateStr: null, near: null, storeLimit: 2, spuIds, log: () => {} })
+  );
+  const all = perCity.map((r) => r.results).flat();
+
+  let prev = null;
+  if (fs.existsSync(outPath)) {
+    try {
+      prev = JSON.parse(fs.readFileSync(outPath, 'utf8')).results ?? null;
+    } catch {
+      prev = null; // 快照损坏时当作首次
+    }
+  }
+  const diff = diffSnapshots(prev, all);
+
+  const snapshot = {
+    generatedAt: new Date().toISOString(),
+    cities,
+    stats: { sessions: all.length, stores: new Set(all.map((r) => r.storeCode)).size },
+    diff: {
+      newCount: diff.newSessions.length,
+      soldOutCount: diff.soldOut.length,
+      decreasedCount: diff.decreased.length,
+    },
+    results: all,
+  };
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 1), 'utf8');
+
+  const first = prev == null;
+  console.log(`\n快照已写入 ${outPath}：${all.length} 场 / ${snapshot.stats.stores} 家门店${first ? '（首次基线）' : ''}`);
+  if (!first) {
+    console.log(`信号：新释出 ${diff.newSessions.length} 场 · 售罄/下架 ${diff.soldOut.length} 场 · 名额减少 ${diff.decreased.length} 场`);
+    for (const s of diff.newSessions.slice(0, 5)) {
+      console.log(`  [新] ${s.spuName} · ${s.storeName} · ${s.date} ${s.timeStart} · ${s.priceText}`);
+    }
+    for (const s of diff.decreased.slice(0, 5)) {
+      console.log(`  [减] ${s.spuName} · ${s.storeName} · ${s.date} ${s.timeStart} 剩余 ${s.leftNum}（-${s.delta}）`);
+    }
+    for (const s of diff.soldOut.slice(0, 3)) {
+      console.log(`  [光] ${s.spuName} · ${s.storeName} · ${s.date} ${s.timeStart} 已售罄`);
+    }
+  }
+}
+
+/** 常用城市码 → 名称（仅用于展示） */
+function CITY_NAME_HINT(code) {
+  const map = { '310100': '上海', '110100': '北京', '440100': '广州', '440300': '深圳', '330100': '杭州' };
+  return map[String(code)] ?? `城市 ${code}`;
 }
 
 /** CLI 主入口 */
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const flags = parseArgs(rest);
-  // --json 模式下 stdout 必须是纯 JSON：BANNER 改走 stderr
-  if (flags.json === true) {
+  // JSON 输出模式下 stdout 必须是纯 JSON：BANNER 改走 stderr
+  if (flags.json === true || flags.format === 'json') {
     process.stderr.write(BANNER + '\n');
   } else {
     console.log(BANNER);
@@ -586,6 +680,8 @@ async function main() {
       return cmdSessions(flags);
     case 'plan':
       return cmdPlan(flags);
+    case 'watch':
+      return cmdWatch(flags);
     case 'book':
       return cmdBook(flags);
     default:

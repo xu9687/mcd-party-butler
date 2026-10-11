@@ -56,6 +56,11 @@
   .preview .d{color:#8B8B9E}
   footer{border-top:1px solid var(--line);margin-top:52px;padding:26px 0 40px;color:var(--ink-soft);font-size:13px}
   footer a{color:var(--red)}
+  #watchBoard table{font-size:13px}
+  #watchBoard .sig{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  #watchBoard .sig span{border-radius:8px;padding:4px 12px;font-size:12.5px;background:var(--yellow-soft);border:1px solid #F2DE9A}
+  #watchBoard .sig b{color:var(--red)}
+  #watchBoard .ts{color:var(--ink-soft);font-size:12px;margin-top:8px}
   @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -156,10 +161,52 @@
     <p style="font-size:13px;color:var(--ink-soft);margin-top:12px">WorkBuddy 用户配置后直接对话「帮我看看上海周末有什么麦当劳派对」；CLI 用户零依赖，只要 Node ≥ 18。</p>
   </section>
 
+  <section>
+    <h2>全城场次稀缺性看板（自动更新）</h2>
+    <p class="desc">GitHub Actions 每天两次自动扫描四城场次库存并更新快照——剩余名额、新释出场次、售罄信号，全部来自官方 MCP 实时数据。</p>
+    <div class="card" id="watchBoard" style="min-height:64px">
+      <p style="color:var(--ink-soft);font-size:13.5px" id="watchLoading">正在加载最新快照…（若长时间无响应，快照任务尚未完成首次运行）</p>
+    </div>
+  </section>
+
   <footer>
     <p><a href="https://github.com/xu9687/mcd-party-butler">GitHub · xu9687/mcd-party-butler</a> ｜ 麦当劳程序员创意开发大赛（M-CODE）参赛作品 ｜ 本页数据为 2026-10-10 真实运行结果，价格与名额以官方 MCP 实时结果为准 ｜ 非官方工具，与麦当劳公司无隶属关系</p>
   </footer>
 </div>
+
+<script>
+"use strict";
+(function loadWatch() {
+  var board = document.getElementById("watchBoard");
+  fetch("./watch-latest.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (d) {
+      var cn = { "310100": "上海", "110100": "北京", "440100": "广州", "440300": "深圳" };
+      var byCity = {};
+      d.results.forEach(function (r) {
+        var c = cn[r.cityCode] || r.cityCode;
+        (byCity[c] = byCity[c] || []).push(r);
+      });
+      var rows = "";
+      Object.keys(byCity).forEach(function (c) {
+        var list = byCity[c];
+        var cheapest = Math.min.apply(null, list.map(function (r) { return r.priceFen != null ? r.priceFen / 100 : Infinity; }));
+        var left = list.reduce(function (a, r) { return a + (r.leftNum || 0); }, 0);
+        rows += "<tr><td><b>" + c + "</b></td><td>" + list.length + " 场</td><td>¥" + cheapest.toFixed(0) + " 起</td><td>" + left + "</td></tr>";
+      });
+      var sig = d.diff && d.diff.newCount + d.diff.soldOutCount + d.diff.decreasedCount > 0
+        ? '<div class="sig"><span>新释出 <b>' + d.diff.newCount + '</b></span><span>售罄 <b>' + d.diff.soldOutCount + '</b></span><span>名额减少 <b>' + d.diff.decreasedCount + '</b></span></div>'
+        : '<div class="sig"><span>对比上次快照：<b>无变化</b></span></div>';
+      board.innerHTML =
+        sig +
+        "<table><tr><th>城市</th><th>可订场次</th><th>最低单价</th><th>剩余名额合计</th></tr>" + rows + "</table>" +
+        '<p class="ts">快照时间：' + new Date(d.generatedAt).toLocaleString("zh-CN", { hour12: false }) + " · 详见 <a href='https://github.com/xu9687/mcd-party-butler/blob/main/docs/watch-latest.json' style='color:var(--red)'>watch-latest.json</a></p>";
+    })
+    .catch(function () {
+      document.getElementById("watchLoading").textContent = "快照尚未生成（定时任务等待 MCD_MCP_TOKEN secret 配置后自动开始）。本地可运行 node party.mjs watch --city 310100 生成。";
+    });
+})();
+</script>
 
 </body>
 </html>
