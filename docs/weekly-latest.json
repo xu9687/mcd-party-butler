@@ -5,8 +5,8 @@
   "days": 1
  },
  "totals": {
-  "observed": 8,
-  "distinct": 8,
+  "observed": 31,
+  "distinct": 31,
   "gone": 0,
   "newCount": 0
  },
@@ -25,16 +25,64 @@
    },
    "hottest": null,
    "hottestCount": 0
+  },
+  {
+   "code": "110100",
+   "name": "北京",
+   "observed": 7,
+   "distinct": 7,
+   "gone": 0,
+   "newCount": 0,
+   "minPriceText": "¥45",
+   "minPriceItem": {
+    "spuName": "麦当劳亲子读书会",
+    "storeName": "麦当劳北京东单北大街餐厅"
+   },
+   "hottest": null,
+   "hottestCount": 0
+  },
+  {
+   "code": "440100",
+   "name": "广州",
+   "observed": 8,
+   "distinct": 8,
+   "gone": 0,
+   "newCount": 0,
+   "minPriceText": "¥45",
+   "minPriceItem": {
+    "spuName": "麦当劳亲子读书会",
+    "storeName": "麦当劳广州华夏康隆餐厅"
+   },
+   "hottest": null,
+   "hottestCount": 0
+  },
+  {
+   "code": "440300",
+   "name": "深圳",
+   "observed": 8,
+   "distinct": 8,
+   "gone": 0,
+   "newCount": 0,
+   "minPriceText": "¥45",
+   "minPriceItem": {
+    "spuName": "麦当劳亲子读书会",
+    "storeName": "麦当劳深圳益田地铁站餐厅"
+   },
+   "hottest": null,
+   "hottestCount": 0
   }
  ],
  "curves": [],
  "narrative": {
-  "headline": "一周追踪 1 城（上海）8 个真实场次：0 个已退场，0 个新释出",
+  "headline": "一周追踪 4 城（上海/北京/广州/深圳）31 个真实场次：0 个已退场，0 个新释出",
   "bullets": [
-   "上海：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。"
+   "上海：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
+   "北京：观测 7 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
+   "广州：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
+   "深圳：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。"
   ],
   "killer": null,
   "sampleNote": "样本积累中（仅 1 天快照）：数字尚小，趋势请以两周后的完整曲线为准。"
  },
- "generatedAt": "2026-10-11T15:27:32.463Z"
+ "generatedAt": "2026-10-11T15:40:08.793Z"
 }
