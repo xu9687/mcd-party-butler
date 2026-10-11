@@ -19,7 +19,8 @@ import { table, clip } from './lib/format.mjs';
 import { buildIcs } from './lib/ics.mjs';
 import { filterSessions, sortResults, pickDate, buildBookHint, mapLimit, diffSnapshots } from './lib/plan.mjs';
 import { buildHtmlReport } from './lib/html-report.mjs';
-import { buildSurvivalTable, computeProgress, buildShareCard, birthdayPhase } from './lib/track.mjs';
+import { buildSurvivalTable, computeProgress, buildShareCard, buildRecruitIssue, birthdayPhase } from './lib/track.mjs';
+import { buildWeekly, renderWeeklyMarkdown } from './lib/weekly.mjs';
 
 const VERSION = '1.3.0';
 const BANNER = `麦麦派对管家 v${VERSION} · 数据来自麦当劳官方 MCP · 仅供参考`;
@@ -61,6 +62,12 @@ const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
   survival
       场次存活统计：基于历史快照输出每个场次的初始/当前名额、存活天数、
       消失场次数——「不盯就没了」的实证。
+
+  weekly [--out <文件.md>]
+      麦门派对周报：聚合 watch 历史快照，生成分城战报、最抢手时段、
+      名额消亡榜与叙事摘要。输出 docs/weekly-latest.json（展示页与
+      Actions 周报 Issue 的数据源）；--out 可同时导出 Markdown。
+      配套 GitHub Actions 每周一 09:00（北京时间）自动更新并发 Issue。
 
   birthday add --name <名字> --date <MM-DD> --city <code> --guests <n> [--budget <元>]
   birthday list | remove --name <名字> | check
@@ -677,8 +684,8 @@ function writeLocalJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
-/** survival 子命令：基于历史快照的场次存活统计（数据地基：watch 每日自动归档） */
-async function cmdSurvival() {
+/** 读取 watch 历史归档（含 watch-latest 作为最新观测），按日期升序 */
+function readHistoryDays() {
   const histDir = 'docs/watch-history';
   let days = [];
   try {
@@ -690,7 +697,6 @@ async function cmdSurvival() {
   } catch {
     // 目录不存在
   }
-  // 把当前 watch-latest 一并计入（最新观测）
   try {
     const latest = readLocalJson('docs/watch-latest.json', {});
     if (latest.results?.length) {
@@ -700,8 +706,12 @@ async function cmdSurvival() {
   } catch {
     // 忽略
   }
-  days.sort((a, b) => a.date.localeCompare(b.date));
+  return days.sort((a, b) => a.date.localeCompare(b.date));
+}
 
+/** survival 子命令：基于历史快照的场次存活统计（数据地基：watch 每日自动归档） */
+async function cmdSurvival() {
+  const days = readHistoryDays();
   if (days.length === 0) {
     console.log('尚无历史快照。先运行 node party.mjs watch --city <code>，定时任务会每日自动归档。');
     return;
@@ -727,6 +737,34 @@ async function cmdSurvival() {
   if (gone.length > 0) {
     console.log(`\n消失场次 ${gone.length} 个（已售罄/下架/日期滚动）——这些就是「不盯就没了」的证据。`);
   }
+}
+
+/** weekly 子命令：麦门派对周报（数据叙事，展示页与 Actions 周报 Issue 的数据源） */
+async function cmdWeekly(flags) {
+  const days = readHistoryDays();
+  if (days.length === 0) {
+    console.log('尚无历史快照。先运行 node party.mjs watch --city <code> 积累数据，周报才有原料。');
+    return;
+  }
+  const cityNames = {};
+  for (const d of days) for (const r of d.results) if (r.cityCode) cityNames[r.cityCode] ??= CITY_NAME_HINT(r.cityCode);
+  const report = buildWeekly(days, { cityNames });
+  if (!report) {
+    console.log('历史快照均为空，无法生成周报。');
+    return;
+  }
+  report.generatedAt = new Date().toISOString();
+
+  // 写 JSON（展示页数据源）+ Markdown（Issue 正文）
+  fs.mkdirSync('docs', { recursive: true });
+  fs.writeFileSync('docs/weekly-latest.json', JSON.stringify(report, null, 1), 'utf8');
+  const md = renderWeeklyMarkdown(report);
+  const outMd = typeof flags.out === 'string' && flags.out !== '' ? flags.out : null;
+  if (outMd) fs.writeFileSync(outMd, md + '\n', 'utf8');
+
+  console.log(`周报已生成：docs/weekly-latest.json${outMd ? ` + ${outMd}` : ''}（追踪 ${report.period.days} 天：${report.period.from} ~ ${report.period.to}）`);
+  console.log('\n—— 本期周报预览 ——\n');
+  console.log(md);
 }
 
 /** birthday 子命令：生日管家（本地存储，隐私不入仓库） */
@@ -860,6 +898,13 @@ async function cmdTrack(flags) {
       { name: item.name, spuName: cur.spuName, storeName: cur.storeName, date: cur.date, timeStart: cur.timeStart, priceText: cur.priceText },
       progress
     ));
+    console.log('\n—— 或发到拼团黑板（本仓库 Issues，零后端撮合）——');
+    console.log(
+      buildRecruitIssue(
+        { name: item.name, spuName: cur.spuName, storeName: cur.storeName, storeCode: cur.storeCode, date: cur.date, timeStart: cur.timeStart, sessionId: cur.sessionId, priceText: cur.priceText },
+        progress
+      )
+    );
   }
 }
 
@@ -885,8 +930,10 @@ async function main() {
     return;
   }
 
-  // 除 help 外均需要 token（callTool 内部也会校验，这里提前给出明确指引）
-  resolveToken();
+  // 仅需 token 的命令才提前校验（weekly/survival/track/birthday 纯本地数据，离线可用）
+  if (!['weekly', 'survival', 'track', 'birthday'].includes(cmd)) {
+    resolveToken();
+  }
 
   switch (cmd) {
     case 'categories':
@@ -905,6 +952,8 @@ async function main() {
       return cmdWatch(flags);
     case 'survival':
       return cmdSurvival();
+    case 'weekly':
+      return cmdWeekly(flags);
     case 'birthday': {
       // birthday <action> --flags：action ∈ add / list / remove / check
       const action = rest[0] && !rest[0].startsWith('--') ? rest[0] : 'check';
