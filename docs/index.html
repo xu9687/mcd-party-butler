@@ -169,6 +169,14 @@
     </div>
   </section>
 
+  <section>
+    <h2>麦门派对周报（每周一 09:00 自动更新）</h2>
+    <p class="desc">同样的数据，讲成故事：分城战报、最抢手时段、名额消亡榜。竞品给你「拍脑袋的概率」，我们给你每日实测的曲线——历史每一期都在仓库 Issues 里存档。</p>
+    <div class="card" id="weeklyBoard" style="min-height:64px">
+      <p style="color:var(--ink-soft);font-size:13.5px" id="weeklyLoading">正在加载最新周报…（首期由定时任务于周一 09:00 发布，也可看历史期数：<a href="https://github.com/xu9687/mcd-party-butler/issues?q=label%3Aweekly-report" style="color:var(--red)">全部周报</a>）</p>
+    </div>
+  </section>
+
   <footer>
     <p><a href="https://github.com/xu9687/mcd-party-butler">GitHub · xu9687/mcd-party-butler</a> ｜ 麦当劳程序员创意开发大赛（M-CODE）参赛作品 ｜ 本页数据为 2026-10-10 真实运行结果，价格与名额以官方 MCP 实时结果为准 ｜ 非官方工具，与麦当劳公司无隶属关系</p>
   </footer>
@@ -204,6 +212,63 @@
     })
     .catch(function () {
       document.getElementById("watchLoading").textContent = "快照尚未生成（定时任务等待 MCD_MCP_TOKEN secret 配置后自动开始）。本地可运行 node party.mjs watch --city 310100 生成。";
+    });
+})();
+(function loadWeekly() {
+  var board = document.getElementById("weeklyBoard");
+  fetch("./weekly-latest.json", { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (rep) {
+      var n = rep.narrative || {};
+      var html = '<p style="font-size:15px;font-weight:500;margin:0 0 10px">' + (n.headline || "") + "</p>";
+      if (n.bullets && n.bullets.length) {
+        html += '<ul style="margin:0 0 12px;padding-left:18px;font-size:13.5px;line-height:1.9">' +
+          n.bullets.map(function (b) { return "<li>" + b + "</li>"; }).join("") + "</ul>";
+      }
+      if (n.killer) html += '<p style="font-size:13.5px;background:var(--yellow-soft);border:1px solid #F2DE9A;border-radius:8px;padding:8px 12px">' + n.killer + "</p>";
+      if (n.sampleNote) html += '<p style="font-size:12.5px;color:var(--ink-soft);margin:8px 0 0">' + n.sampleNote + "</p>";
+      var curves = rep.curves || [];
+      if (curves.length >= 1 && curves.some(function (c) { return c.points.length >= 2; })) {
+        var W = 640, H = 240, PL = 40, PR = 14, PT = 14, PB = 30;
+        var maxPts = Math.max.apply(null, curves.map(function (c) { return c.points.length; }));
+        var yMax = Math.max.apply(null, curves.map(function (c) { return Math.max.apply(null, c.points.map(function (p) { return p.leftNum; })); }));
+        yMax = Math.max(4, yMax);
+        var xAt = function (i) { return PL + (i / Math.max(1, maxPts - 1)) * (W - PL - PR); };
+        var yAt = function (v) { return PT + (1 - v / yMax) * (H - PT - PB); };
+        var colors = ["#A32D2D", "#185FA5", "#639922", "#BA7517", "#534AB7", "#888780"];
+        var lines = "", legend = "";
+        curves.forEach(function (c, ci) {
+          var pts = c.points.map(function (p, i) { return xAt(i).toFixed(1) + "," + yAt(p.leftNum).toFixed(1); }).join(" ");
+          var col = c.gone ? colors[0] : colors[(ci % 5) + 1];
+          lines += '<polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round"/>';
+          lines += c.points.map(function (p, i) {
+            return '<circle cx="' + xAt(i).toFixed(1) + '" cy="' + yAt(p.leftNum).toFixed(1) + '" r="3" fill="' + col + '"/>';
+          }).join("");
+          legend += '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:2px;background:' + col + '"></span>' +
+            (c.title.length > 14 ? c.title.slice(0, 14) + "…" : c.title) + " " + c.slot.slice(5) + (c.gone ? "（退场）" : "") + "</span>";
+        });
+        var grid = "";
+        [0, yMax / 2, yMax].forEach(function (v) {
+          grid += '<line x1="' + PL + '" y1="' + yAt(v) + '" x2="' + (W - PR) + '" y2="' + yAt(v) + '" stroke="rgba(95,94,90,.15)" stroke-width="1"/>' +
+            '<text x="' + (PL - 6) + '" y="' + (yAt(v) + 4) + '" text-anchor="end" font-size="11" fill="#888780">' + v + "</text>";
+        });
+        var first = curves[0].points, xLabels = "";
+        if (maxPts > 1) {
+          xLabels += '<text x="' + xAt(0) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#888780">' + first[0].date.slice(5) + "</text>";
+          xLabels += '<text x="' + xAt(maxPts - 1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#888780">' + first[maxPts - 1].date.slice(5) + "</text>";
+        }
+        html += '<div style="margin-top:14px"><p style="font-size:13.5px;font-weight:500;margin:0 0 6px">名额消亡曲线（纵轴：剩余名额，每周快照连线）</p>' +
+          '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="名额消亡曲线" style="width:100%;max-width:680px">' +
+          '<rect width="' + W + '" height="' + H + '" fill="#FAFAF8" rx="10"/>' + grid + lines + xLabels + "</svg>" +
+          '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#5F5E5A;margin-top:6px">' + legend + "</div></div>";
+      } else {
+        html += '<p style="font-size:13px;color:var(--ink-soft);margin-top:10px">名额消亡曲线将在这里生长：快照累计满 2 天后自动开始绘制（当前 ' + rep.period.days + " 天）。</p>";
+      }
+      html += '<p style="font-size:12px;color:var(--ink-soft);margin-top:10px">期数范围：' + rep.period.from + " ~ " + rep.period.to + ' · 生成于 ' + new Date(rep.generatedAt).toLocaleString("zh-CN", { hour12: false }) + ' · <a href="https://github.com/xu9687/mcd-party-butler/issues?q=label%3Aweekly-report" style="color:var(--red)">历史期数存档</a></p>';
+      board.innerHTML = html;
+    })
+    .catch(function () {
+      document.getElementById("weeklyLoading").innerHTML = "周报尚未发布（首期由定时任务于周一 09:00 生成）。历史期数：<a href='https://github.com/xu9687/mcd-party-butler/issues?q=label%3Aweekly-report' style='color:var(--red)'>Issues 存档</a>。本地可运行 node party.mjs weekly 提前看。";
     });
 })();
 </script>

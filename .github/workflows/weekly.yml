@@ -1,0 +1,49 @@
+name: weekly
+
+on:
+  schedule:
+    # UTC 01:00 周一 = 北京时间周一 09:00，麦门派对周报
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Refresh snapshot (freshest data for the report)
+        run: node party.mjs watch --city 310100,110100,440100,440300
+        env:
+          MCD_MCP_TOKEN: ${{ secrets.MCD_MCP_TOKEN }}
+      - name: Build weekly report
+        run: node party.mjs weekly --out docs/weekly-latest.md
+      - name: Commit report artifacts
+        run: |
+          git config user.name "watch-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/weekly-latest.json docs/weekly-latest.md docs/watch-latest.json docs/watch-history/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(weekly): 麦门派对周报 $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "周报无变化，跳过提交"
+          fi
+      - name: Publish report as Issue (skip if title exists)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE=$(node -e "console.log(JSON.parse(require('fs').readFileSync('docs/weekly-latest.json','utf8')).narrative.headline)")
+          ISSUE_TITLE="麦门派对周报（$(node -e "const r=JSON.parse(require('fs').readFileSync('docs/weekly-latest.json','utf8'));console.log(r.period.from+' ~ '+r.period.to)")）"
+          if gh issue list --search "in:title \"$ISSUE_TITLE\"" --state all | grep -q .; then
+            echo "本期周报 Issue 已存在，跳过"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file docs/weekly-latest.md --label "weekly-report" || \
+            gh issue create --title "$ISSUE_TITLE" --body-file docs/weekly-latest.md
+          fi

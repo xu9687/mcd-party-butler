@@ -1,0 +1,40 @@
+{
+ "period": {
+  "from": "2026-10-11",
+  "to": "2026-10-11",
+  "days": 1
+ },
+ "totals": {
+  "observed": 8,
+  "distinct": 8,
+  "gone": 0,
+  "newCount": 0
+ },
+ "cities": [
+  {
+   "code": "310100",
+   "name": "上海",
+   "observed": 8,
+   "distinct": 8,
+   "gone": 0,
+   "newCount": 0,
+   "minPriceText": "¥45",
+   "minPriceItem": {
+    "spuName": "麦当劳亲子读书会",
+    "storeName": "麦当劳上海黄浦华旭国际大厦餐厅"
+   },
+   "hottest": null,
+   "hottestCount": 0
+  }
+ ],
+ "curves": [],
+ "narrative": {
+  "headline": "一周追踪 1 城（上海）8 个真实场次：0 个已退场，0 个新释出",
+  "bullets": [
+   "上海：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。"
+  ],
+  "killer": null,
+  "sampleNote": "样本积累中（仅 1 天快照）：数字尚小，趋势请以两周后的完整曲线为准。"
+ },
+ "generatedAt": "2026-10-11T15:27:32.463Z"
+}
