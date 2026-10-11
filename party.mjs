@@ -19,8 +19,9 @@ import { table, clip } from './lib/format.mjs';
 import { buildIcs } from './lib/ics.mjs';
 import { filterSessions, sortResults, pickDate, buildBookHint, mapLimit, diffSnapshots } from './lib/plan.mjs';
 import { buildHtmlReport } from './lib/html-report.mjs';
+import { buildSurvivalTable, computeProgress, buildShareCard, birthdayPhase } from './lib/track.mjs';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const BANNER = `麦麦派对管家 v${VERSION} · 数据来自麦当劳官方 MCP · 仅供参考`;
 
 const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
@@ -55,6 +56,21 @@ const HELP_TEXT = `用法：node party.mjs <子命令> [参数]
       （新释出场次 / 售罄 / 名额减少）。配合 GitHub Actions 定时任务可持续追踪。
       - 默认快照文件：docs/watch-latest.json
       - watch 不做人数/预算过滤（记录全量库存）
+      - 每次运行自动归档到 docs/watch-history/YYYY-MM-DD.json（存活曲线数据地基）
+
+  survival
+      场次存活统计：基于历史快照输出每个场次的初始/当前名额、存活天数、
+      消失场次数——「不盯就没了」的实证。
+
+  birthday add --name <名字> --date <MM-DD> --city <code> --guests <n> [--budget <元>]
+  birthday list | remove --name <名字> | check
+      生日管家：档案仅存本地 birthdays.local.json（隐私不进仓库）。
+      check 自动判断窗口：T-10 出比价推荐，T-3 强提醒（官方要求提前 3 天预订）。
+
+  track --spu <id> --store <code> --date <日期> --session <场次id> [--name <局名>]
+  track
+      拼团进度卡：记录场次后，随时对比最新快照输出「已上车 X 人 · 还剩 Y 名额」，
+      并生成可直接复制到家长群的分享文案（档案存本地 tracked.local.json）。
 
   book --spu <id> --sku <id> --store <门店code> --date <YYYY-MM-DD>
        --session <场次id> --party-type 1|2 --count <n> [--confirm] [--city <城市code>]
@@ -626,6 +642,13 @@ async function cmdWatch(flags) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 1), 'utf8');
 
+  // 历史归档：按日存 docs/watch-history/YYYY-MM-DD.json（当日多次运行覆盖，保留最新）
+  // 这是 survival 存活曲线的数据地基——从现在开始积累，定榜前即有完整时序
+  const histDir = path.join(path.dirname(outPath), 'watch-history');
+  fs.mkdirSync(histDir, { recursive: true });
+  const histFile = path.join(histDir, new Date().toISOString().slice(0, 10) + '.json');
+  fs.writeFileSync(histFile, JSON.stringify({ generatedAt: snapshot.generatedAt, results: all }, null, 1), 'utf8');
+
   const first = prev == null;
   console.log(`\n快照已写入 ${outPath}：${all.length} 场 / ${snapshot.stats.stores} 家门店${first ? '（首次基线）' : ''}`);
   if (!first) {
@@ -639,6 +662,204 @@ async function cmdWatch(flags) {
     for (const s of diff.soldOut.slice(0, 3)) {
       console.log(`  [光] ${s.spuName} · ${s.storeName} · ${s.date} ${s.timeStart} 已售罄`);
     }
+  }
+}
+
+/** 本地档案读写（生日/追踪，均不入公开仓库，见 .gitignore） */
+function readLocalJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+function writeLocalJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+/** survival 子命令：基于历史快照的场次存活统计（数据地基：watch 每日自动归档） */
+async function cmdSurvival() {
+  const histDir = 'docs/watch-history';
+  let days = [];
+  try {
+    days = fs
+      .readdirSync(histDir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => ({ date: f.slice(0, 10), results: readLocalJson(path.join(histDir, f), {}).results ?? [] }))
+      .filter((d) => d.results.length > 0);
+  } catch {
+    // 目录不存在
+  }
+  // 把当前 watch-latest 一并计入（最新观测）
+  try {
+    const latest = readLocalJson('docs/watch-latest.json', {});
+    if (latest.results?.length) {
+      const d = latest.generatedAt.slice(0, 10);
+      if (!days.some((x) => x.date === d)) days.push({ date: d, results: latest.results });
+    }
+  } catch {
+    // 忽略
+  }
+  days.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (days.length === 0) {
+    console.log('尚无历史快照。先运行 node party.mjs watch --city <code>，定时任务会每日自动归档。');
+    return;
+  }
+  const survTable = buildSurvivalTable(days);
+  const alive = survTable.filter((s) => s.aliveDays === days.length);
+  const gone = survTable.filter((s) => s.aliveDays < days.length);
+  console.log(`已积累 ${days.length} 天快照（${days[0].date} ~ ${days[days.length - 1].date}）：共观测 ${survTable.length} 个场次`);
+  if (days.length < 3) console.log('（数据积累中：满 3 天后本表开始有统计意义，两周后可拟合存活曲线）');
+
+  const rows = survTable.slice(0, 10).map((s) => [
+    clip(s.spuName, 14),
+    clip(s.storeName, 12),
+    `${s.date} ${s.timeStart}`,
+    s.firstLeft,
+    s.lastLeft,
+    `${s.aliveDays}天`,
+    s.aliveDays === days.length ? '在售' : '已消失',
+  ]);
+  console.log(
+    table(['商品', '门店', '场次', '初始名额', '当前名额', '存活', '状态'], rows)
+  );
+  if (gone.length > 0) {
+    console.log(`\n消失场次 ${gone.length} 个（已售罄/下架/日期滚动）——这些就是「不盯就没了」的证据。`);
+  }
+}
+
+/** birthday 子命令：生日管家（本地存储，隐私不入仓库） */
+async function cmdBirthday(flags, action) {
+  const FILE = 'birthdays.local.json';
+  const list = readLocalJson(FILE, []);
+
+  if (action === 'add') {
+    requireFlags(flags, ['name', 'date', 'city', 'guests']);
+    const entry = {
+      name: String(flags.name),
+      date: String(flags.date),
+      city: String(flags.city),
+      guests: Number(flags.guests),
+      budget: flags.budget !== undefined && flags.budget !== true ? Number(flags.budget) : null,
+    };
+    if (!/^\d{2}-\d{2}$/.test(entry.date)) throw new Error('--date 格式应为 MM-DD，如 05-20');
+    const phase = birthdayPhase(entry.date);
+    const i = list.findIndex((x) => x.name === entry.name);
+    if (i >= 0) list[i] = entry;
+    else list.push(entry);
+    writeLocalJson(FILE, list);
+    console.log(`已保存生日档案：${entry.name}（${entry.date} · ${entry.city} · ${entry.guests} 人）`);
+    console.log(`距离下一个生日还有 ${phase.daysLeft} 天。档案仅存本地 ${FILE}，不会进入公开仓库。`);
+    return;
+  }
+
+  if (action === 'remove') {
+    requireFlags(flags, ['name']);
+    const next = list.filter((x) => x.name !== String(flags.name));
+    if (next.length === list.length) throw new Error(`未找到档案 "${flags.name}"`);
+    writeLocalJson(FILE, next);
+    console.log(`已删除 ${flags.name} 的生日档案。`);
+    return;
+  }
+
+  // list / check：逐个评估窗口
+  if (list.length === 0) {
+    console.log(`暂无生日档案。添加：node party.mjs birthday add --name 小宝 --date 05-20 --city 310100 --guests 8`);
+    return;
+  }
+  for (const b of list) {
+    const phase = birthdayPhase(b.date);
+    const head = `${b.name}（${b.date} · ${b.city} · ${b.guests} 人）→ 还有 ${phase.daysLeft} 天`;
+    if (action === 'list' || phase.phase === 'far') {
+      console.log(`  ${head}${phase.phase === 'far' ? '（尚未到推荐窗口，T-10 时自动出方案）' : ''}`);
+      continue;
+    }
+    if (phase.phase === 'today') {
+      console.log(`  ${head} · 今天就是生日！🎉 直接用 plan 命令找当日场次，或联系门店。`);
+      continue;
+    }
+    // recommend（T-10）/ book（T-3）：自动出推荐
+    const tag = phase.phase === 'book' ? '⚠️ 预订窗口（官方要求提前 3 天，立即锁定）' : '推荐窗口（提前比价）';
+    console.log(`\n  ${head} · ${tag}`);
+    const { results } = await collectPlanData({
+      cityCode: b.city,
+      guests: b.guests,
+      budgetFen: b.budget ? Math.round(b.budget * 100) : null,
+      dateStr: null,
+      near: null,
+      storeLimit: 3,
+      spuIds: null,
+      log: () => {},
+    });
+    const ranked = sortResults(results).slice(0, 3);
+    if (ranked.length === 0) {
+      console.log('  未找到满足条件的场次，建议放宽预算或更换城市。');
+      continue;
+    }
+    for (const r of ranked) {
+      console.log(`    · ${r.spuName} | ${r.storeName} | ${r.date} ${r.timeStart}-${r.timeEnd} | ${r.priceText}/人 | 剩${r.leftNum}`);
+    }
+    console.log(`    下一步（dry-run 预览）：${buildBookHint(ranked[0])}`);
+  }
+}
+
+/** track 子命令：拼团进度卡（记录场次 → 对比最新快照 → 可分享文案） */
+async function cmdTrack(flags) {
+  const FILE = 'tracked.local.json';
+  const list = readLocalJson(FILE, []);
+  const latest = readLocalJson('docs/watch-latest.json', {});
+  const latestByKey = new Map((latest.results ?? []).map((r) => [`${r.spuId}:${r.storeCode}:${r.sessionId}`, r]));
+
+  if (flags.spu !== undefined) {
+    // 记录新追踪项
+    requireFlags(flags, ['spu', 'store', 'date', 'session']);
+    const key = `${flags.spu}:${flags.store}:${flags.session}`;
+    const cur = latestByKey.get(key);
+    const entry = {
+      name: typeof flags.name === 'string' ? flags.name : null,
+      spuId: Number(flags.spu),
+      storeCode: String(flags.store),
+      date: String(flags.date),
+      sessionId: Number(flags.session),
+      spuName: cur?.spuName ?? '',
+      storeName: cur?.storeName ?? '',
+      timeStart: cur?.timeStart ?? '',
+      priceText: cur?.priceText ?? '',
+      initialLeft: cur != null ? Number(cur.leftNum) : null,
+      addedAt: new Date().toISOString(),
+    };
+    const i = list.findIndex((x) => `${x.spuId}:${x.storeCode}:${x.sessionId}` === key);
+    if (i >= 0) list[i] = entry;
+    else list.push(entry);
+    writeLocalJson(FILE, list);
+    console.log(
+      `已开始追踪：${entry.spuName || key} · ${entry.storeName} · ${entry.date} ${entry.timeStart}（记录时名额 ${entry.initialLeft ?? '未知'}）`
+    );
+    console.log(`之后随时运行 node party.mjs track 查看进度。追踪档案仅存本地 ${FILE}。`);
+    return;
+  }
+
+  if (list.length === 0) {
+    console.log('暂无追踪项。添加：node party.mjs track --spu 1830 --store 1450713 --date 2026-10-17 --session 36935759 [--name 小宝生日局]');
+    return;
+  }
+  for (const item of list) {
+    const key = `${item.spuId}:${item.storeCode}:${item.sessionId}`;
+    const cur = latestByKey.get(key);
+    const label = item.name ? `${item.name} · ` : '';
+    if (!cur) {
+      console.log(`\n${label}${item.spuName || key}（${item.date} ${item.timeStart}）：已从最新快照消失——大概率售罄或下架，去 App 确认吧。`);
+      continue;
+    }
+    const progress = computeProgress(item.initialLeft ?? cur.leftNum, cur.leftNum);
+    console.log(`\n${label}${item.spuName} · ${item.storeName} · ${item.date} ${item.timeStart}`);
+    console.log(`名额 ${item.initialLeft} → ${cur.leftNum}（${progress.joined} 人已上车${progress.soldOut ? '，已满员' : ''}）`);
+    console.log('—— 复制下面这段发到群里 ——');
+    console.log(buildShareCard(
+      { name: item.name, spuName: cur.spuName, storeName: cur.storeName, date: cur.date, timeStart: cur.timeStart, priceText: cur.priceText },
+      progress
+    ));
   }
 }
 
@@ -682,6 +903,19 @@ async function main() {
       return cmdPlan(flags);
     case 'watch':
       return cmdWatch(flags);
+    case 'survival':
+      return cmdSurvival();
+    case 'birthday': {
+      // birthday <action> --flags：action ∈ add / list / remove / check
+      const action = rest[0] && !rest[0].startsWith('--') ? rest[0] : 'check';
+      const bFlags = parseArgs(rest[0] && !rest[0].startsWith('--') ? rest.slice(1) : rest);
+      if (!['add', 'list', 'remove', 'check'].includes(action)) {
+        throw new Error(`birthday 的动作只能是 add / list / remove / check，收到 "${action}"`);
+      }
+      return cmdBirthday(bFlags, action);
+    }
+    case 'track':
+      return cmdTrack(flags);
     case 'book':
       return cmdBook(flags);
     default:
