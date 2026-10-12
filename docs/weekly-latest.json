@@ -1,23 +1,23 @@
 {
  "period": {
   "from": "2026-10-11",
-  "to": "2026-10-11",
-  "days": 1
+  "to": "2026-10-12",
+  "days": 2
  },
  "totals": {
-  "observed": 31,
-  "distinct": 31,
-  "gone": 0,
-  "newCount": 0
+  "observed": 76,
+  "distinct": 47,
+  "gone": 2,
+  "newCount": 16
  },
  "cities": [
   {
    "code": "310100",
    "name": "上海",
-   "observed": 8,
-   "distinct": 8,
+   "observed": 20,
+   "distinct": 12,
    "gone": 0,
-   "newCount": 0,
+   "newCount": 4,
    "minPriceText": "¥45",
    "minPriceItem": {
     "spuName": "麦当劳亲子读书会",
@@ -29,10 +29,10 @@
   {
    "code": "110100",
    "name": "北京",
-   "observed": 7,
-   "distinct": 7,
+   "observed": 18,
+   "distinct": 11,
    "gone": 0,
-   "newCount": 0,
+   "newCount": 4,
    "minPriceText": "¥45",
    "minPriceItem": {
     "spuName": "麦当劳亲子读书会",
@@ -44,25 +44,25 @@
   {
    "code": "440100",
    "name": "广州",
-   "observed": 8,
-   "distinct": 8,
-   "gone": 0,
-   "newCount": 0,
+   "observed": 18,
+   "distinct": 12,
+   "gone": 2,
+   "newCount": 4,
    "minPriceText": "¥45",
    "minPriceItem": {
     "spuName": "麦当劳亲子读书会",
     "storeName": "麦当劳广州华夏康隆餐厅"
    },
-   "hottest": null,
-   "hottestCount": 0
+   "hottest": "周一 10:30",
+   "hottestCount": 2
   },
   {
    "code": "440300",
    "name": "深圳",
-   "observed": 8,
-   "distinct": 8,
+   "observed": 20,
+   "distinct": 12,
    "gone": 0,
-   "newCount": 0,
+   "newCount": 4,
    "minPriceText": "¥45",
    "minPriceItem": {
     "spuName": "麦当劳亲子读书会",
@@ -72,17 +72,144 @@
    "hottestCount": 0
   }
  ],
- "curves": [],
+ "curves": [
+  {
+   "key": "8516:1450713:36854295",
+   "title": "麦当劳一起开心鸭尊享版生日派对 · 麦当劳上海黄浦华旭国际大厦餐厅",
+   "slot": "2026-10-15 12:00",
+   "priceText": "¥138",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  },
+  {
+   "key": "8516:1450713:36859262",
+   "title": "麦当劳一起开心鸭尊享版生日派对 · 麦当劳上海黄浦华旭国际大厦餐厅",
+   "slot": "2026-10-15 18:30",
+   "priceText": "¥138",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  },
+  {
+   "key": "8516:1450586:36854195",
+   "title": "麦当劳一起开心鸭尊享版生日派对 · 麦当劳上海仙乐斯餐厅",
+   "slot": "2026-10-15 12:00",
+   "priceText": "¥138",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  },
+  {
+   "key": "8516:1450586:36859162",
+   "title": "麦当劳一起开心鸭尊享版生日派对 · 麦当劳上海仙乐斯餐厅",
+   "slot": "2026-10-15 18:30",
+   "priceText": "¥138",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  },
+  {
+   "key": "1830:1450713:36874107",
+   "title": "麦当劳亲子读书会 · 麦当劳上海黄浦华旭国际大厦餐厅",
+   "slot": "2026-10-15 10:30",
+   "priceText": "¥45",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  },
+  {
+   "key": "1830:1450713:36879063",
+   "title": "麦当劳亲子读书会 · 麦当劳上海黄浦华旭国际大厦餐厅",
+   "slot": "2026-10-15 14:00",
+   "priceText": "¥45",
+   "cityCode": "310100",
+   "gone": false,
+   "firstLeft": 12,
+   "lastLeft": 12,
+   "spanDays": 2,
+   "points": [
+    {
+     "date": "2026-10-11",
+     "leftNum": 12
+    },
+    {
+     "date": "2026-10-12",
+     "leftNum": 12
+    }
+   ]
+  }
+ ],
  "narrative": {
-  "headline": "一周追踪 4 城（上海/北京/广州/深圳）31 个真实场次：0 个已退场，0 个新释出",
+  "headline": "一周追踪 4 城（上海/北京/广州/深圳）47 个真实场次：2 个已退场，16 个新释出",
   "bullets": [
-   "上海：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
-   "北京：观测 7 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
-   "广州：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。",
-   "深圳：观测 8 场，退场 0 场，最低 ¥45（麦当劳亲子读书会）。"
+   "上海：观测 12 场，退场 0 场，新释出 4 场，最低 ¥45（麦当劳亲子读书会）。",
+   "北京：观测 11 场，退场 0 场，新释出 4 场，最低 ¥45（麦当劳亲子读书会）。",
+   "广州：观测 12 场，退场 2 场，新释出 4 场，最低 ¥45（麦当劳亲子读书会），最抢手时段「周一 10:30」退场 2 场。",
+   "深圳：观测 12 场，退场 0 场，新释出 4 场，最低 ¥45（麦当劳亲子读书会）。"
   ],
-  "killer": null,
-  "sampleNote": "样本积累中（仅 1 天快照）：数字尚小，趋势请以两周后的完整曲线为准。"
+  "killer": "消亡最快：麦当劳一起开心鸭尊享版生日派对 · 麦当劳上海黄浦华旭国际大厦餐厅 2026-10-15 12:00（¥138），名额 12 → 12 只用了 2 天",
+  "sampleNote": "样本积累中（仅 2 天快照）：数字尚小，趋势请以两周后的完整曲线为准。"
  },
- "generatedAt": "2026-10-11T15:40:08.793Z"
+ "generatedAt": "2026-10-12T07:13:13.114Z"
 }
