@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-10-26T05:35:21.112Z",
+ "generatedAt": "2026-10-26T05:58:06.394Z",
  "cities": [
   "310100",
   "110100",
@@ -11,8 +11,8 @@
   "stores": 17
  },
  "diff": {
-  "newCount": 16,
-  "soldOutCount": 20,
+  "newCount": 0,
+  "soldOutCount": 0,
   "decreasedCount": 0
  },
  "results": [
