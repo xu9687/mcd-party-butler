@@ -166,11 +166,30 @@ function parseNear(v) {
   return { lat, lng };
 }
 
+/**
+ * 商品列表工具双名兼容。
+ * 服务端在 2026-10 底把 `mall-points-products` 更名为 `query-mall-products`
+ * （入参 `catRuleIds` 与可选值完全一致），旧名已返回 unknown tool。
+ * 先试新名，只有在服务端明确报 unknown tool 时才回退旧名，其余错误照常抛出。
+ * @param {{catRuleIds: string}} args
+ */
+async function listMallProducts(args) {
+  try {
+    return await callTool('query-mall-products', args);
+  } catch (err) {
+    const msg = String(err?.message ?? err);
+    if (/unknown tool/i.test(msg)) {
+      return await callTool('mall-points-products', args);
+    }
+    throw err;
+  }
+}
+
 /** categories 子命令：列出全部派对类目及商品 */
 async function cmdCategories() {
   let total = 0;
   for (const cat of PARTY_CATEGORIES) {
-    const products = asArray(await callTool('mall-points-products', { catRuleIds: cat.catRuleIds }));
+    const products = asArray(await listMallProducts({ catRuleIds: cat.catRuleIds }));
     if (products.length === 0) {
       console.log(`\n【${cat.name}】（${cat.catRuleIds}）当前无商品，已略过`);
       continue;
@@ -443,7 +462,7 @@ async function collectPlanData(opts) {
   let spuIds = opts.spuIds;
   if (!Array.isArray(spuIds)) {
     const catProducts = await mapLimit(PARTY_CATEGORIES, 2, async (cat) => {
-      const products = asArray(await callTool('mall-points-products', { catRuleIds: cat.catRuleIds }));
+      const products = asArray(await listMallProducts({ catRuleIds: cat.catRuleIds }));
       return products.length === 0 ? null : { cat: cat.name, p: products[0] };
     });
     spuIds = catProducts.filter(Boolean).map((x) => Number(x.p.spuId));

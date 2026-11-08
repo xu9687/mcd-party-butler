@@ -147,7 +147,7 @@ Token 获取：访问 https://open.mcd.cn/mcp 申请，设置环境变量 `MCD_M
 
 ```mermaid
 flowchart LR
-    A[mall-points-products<br>4类目26商品] --> B[query-party-city<br>279城市·市级码]
+    A[query-mall-products<br>4类目26商品] --> B[query-party-city<br>279城市·市级码]
     B --> C[query-party-store<br>174家门店·可--near排序]
     C --> D[query-party-store-date<br>未来9天]
     D --> E[query-party-store-session<br>price分·leftNum]

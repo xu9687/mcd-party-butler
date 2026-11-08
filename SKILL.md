@@ -31,7 +31,7 @@ Streamable HTTP，`Authorization: Bearer <token>` 鉴权）。价格、场次、
 
 | 步骤 | 工具 | 关键入参 | 说明 |
 | --- | --- | --- | --- |
-| 1 | `mall-points-products` | `catRuleIds` | 派对类目：`1>6>20` 生日类、`1>6>21` 主题类、`1>6>25` 品鉴会、`1>6>34` 读书会（`1>6>22` 体验营与 `1>6>40` 积分兑换当前为空）。返回 `spuId/spuName/point/selling`。商品层 point 显示 0，真实价格在场次层 |
+| 1 | `query-mall-products` | `catRuleIds` | 派对类目：`1>6>20` 生日类、`1>6>21` 主题类、`1>6>25` 品鉴会、`1>6>34` 读书会（`1>6>22` 体验营与 `1>6>40` 积分兑换当前为空）。返回 `spuId/spuName/point/selling`。商品层 point 显示 0，真实价格在场次层 |
 | 2 | `query-party-city` | `spuId` | 返回约 279 个城市（`name/code`）。**坑：code 是市级码（上海市 310100），传省级码（310000）返回空** |
 | 3 | `query-party-store` | `code, spuId` | 返回门店 `name/code/address/distance/distanceText`。**坑：字段是 name/code，不是文档写的 storeName/storeCode** |
 | 4 | `query-party-store-date` | `spuId, storeCode` | 返回 `[{date, storeCode}]`，实测未来 9 天 |

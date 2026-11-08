@@ -17,7 +17,10 @@
 
 ## 二、用到的 7 个工具
 
-### 1. `mall-points-products` — 派对类目商品列表
+### 1. `query-mall-products` — 派对类目商品列表
+
+> 兼容说明：该工具原名 `mall-points-products`，服务端已于 2026-10 底更名，
+> 入参与可选值不变。`party.mjs` 的 `listMallProducts()` 对两个名字做了双名兼容。
 
 - 入参：`{ catRuleIds }`，派对类目树：`1>6>20` 生日类派对（6 商品）、`1>6>21` 主题类派对
   （13 商品）、`1>6>22` 麦麦体验营（当前为空）、`1>6>25` 品鉴会（6 商品）、
@@ -86,7 +89,7 @@ sequenceDiagram
 
     rect rgb(240, 248, 255)
     Note over C,S: 六步只读查询链
-    C->>M: mall-points-products {catRuleIds}
+    C->>M: query-mall-products {catRuleIds}
     M->>S: tools/call
     S-->>C: 类目商品（spuId/spuName）
     C->>M: query-party-city {spuId}
@@ -116,7 +119,7 @@ sequenceDiagram
 
 `mcp-client.mjs` 的 `callTool(name, args)` 统一返回解析后的业务数据：
 
-1. 优先取 `result.structuredContent.data`（mall-points-products、query-party-*、
+1. 优先取 `result.structuredContent.data`（query-mall-products、query-party-*、
    mall-product-detail 等均为此格式）；
 2. 否则从 `result.content[0].text` 中截取 `## Original Response` 之后的字符串
    再 `JSON.parse`（如 list-nutrition-foods 等工具的包装格式）；
